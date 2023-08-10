@@ -41,8 +41,7 @@ jobs:
   build-and-push-image:
     runs-on: ubuntu-latest
     defaults:
-      run:
-        working-directory: ./core
+      working-directory: ./core
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
