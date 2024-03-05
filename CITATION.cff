@@ -1,0 +1,13 @@
+cff-version: 1.2.0
+title: Cheshire Cat AI
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Piero
+    family-names: Savastano
+    email: piero.savastano@gmail.com
+repository-code: 'https://github.com/cheshire-cat-ai/core'
+url: 'https://cheshirecat.ai/'
+license: GPL-3.0
