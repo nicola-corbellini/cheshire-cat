@@ -1,3 +1,5 @@
+import json
+from enum import Enum
 from typing import List, Dict
 from dataclasses import dataclass
 from pydantic import BaseModel, ConfigDict, ValidationError
@@ -5,10 +7,8 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from langchain.chains import LLMChain
 from langchain_core.prompts.prompt import PromptTemplate
 
-#from cat.looking_glass.prompts import MAIN_PROMPT_PREFIX
-from enum import Enum
+from cat.utils import parse_json
 from cat.log import log
-import json
 
 
 # Conversational Form State
@@ -51,7 +51,7 @@ class CatForm:  # base model of forms
     def confirm(self) -> bool:
         
         # Get user message
-        user_message = self.cat.working_memory["user_message_json"]["text"]
+        user_message = self.cat.working_memory.user_message_json.text
         
         # Confirm prompt
         confirm_prompt = \
@@ -79,7 +79,7 @@ JSON:
     def check_exit_intent(self) -> bool:
 
         # Get user message
-        user_message = self.cat.working_memory["user_message_json"]["text"]
+        user_message = self.cat.working_memory.user_message_json.text
 
         # Stop examples
         stop_examples = """
@@ -117,10 +117,8 @@ JSON:
     def next(self):
 
         # could we enrich prompt completion with episodic/declarative memories?
-        #self.cat.working_memory["episodic_memories"] = []
+        #self.cat.working_memory.episodic_memories = []
 
-        if self.check_exit_intent():
-            self._state = CatFormState.CLOSED
 
         # If state is WAIT_CONFIRM, check user confirm response..
         if self._state == CatFormState.WAIT_CONFIRM:
@@ -128,7 +126,13 @@ JSON:
                 self._state = CatFormState.CLOSED
                 return self.submit(self._model)
             else:
-                self._state = CatFormState.INCOMPLETE
+                if self.check_exit_intent():
+                    self._state = CatFormState.CLOSED
+                else:
+                    self._state = CatFormState.INCOMPLETE
+
+        if self.check_exit_intent():
+            self._state = CatFormState.CLOSED
 
         # If the state is INCOMPLETE, execute model update
         # (and change state based on validation result)
@@ -163,12 +167,33 @@ JSON:
         return new_model    
     
     def message(self):
+        state_methods = {
+            CatFormState.CLOSED: self.message_closed,
+            CatFormState.WAIT_CONFIRM: self.message_wait_confirm,
+            CatFormState.INCOMPLETE: self.message_incomplete
+        }
+        state_method = state_methods.get(self._state, lambda: {"output": "Invalid state"})
+        return state_method()
 
-        if self._state == CatFormState.CLOSED:
-            return {
-                "output": f"Form {type(self).__name__} closed"
-            }
-
+        
+    def message_closed(self):
+        return {
+            "output": f"Form {type(self).__name__} closed"
+        }
+    
+    def message_wait_confirm(self):
+        output = self._generate_base_message()
+        output += "\n --> Confirm? Yes or no?"
+        return {
+            "output": output
+        }
+    
+    def message_incomplete(self):
+        return {
+            "output": self._generate_base_message()
+        }
+    
+    def _generate_base_message(self):
         separator = "\n - "
         missing_fields = ""
         if self._missing_fields:
@@ -187,26 +212,7 @@ JSON:
 {missing_fields}
 {invalid_fields}
 """
-    
-        if self._state == CatFormState.WAIT_CONFIRM:
-            out += "\n --> Confirm? Yes or no?"
-
-        return {
-            "output": out
-        }
-
-    def stringify_convo_history(self):
-
-        user_message = self.cat.working_memory["user_message_json"]["text"]
-        chat_history = self.cat.working_memory["history"][-10:] # last n messages
-
-        # stringify history
-        history = ""
-        for turn in chat_history:
-            history += f"\n - {turn['who']}: {turn['message']}"
-        history += f"Human: {user_message}"
-
-        return history
+        return out
 
     # Extract model informations from user message
     def extract(self):
@@ -227,7 +233,7 @@ JSON:
 
         # json parser
         try:
-            output_model = json.loads(json_str)
+            output_model = parse_json(json_str)
         except Exception as e:
             output_model = {} 
             log.warning(e)
@@ -236,7 +242,7 @@ JSON:
     
     def extraction_prompt(self):
 
-        history = self.stringify_convo_history()
+        history = self.cat.stringify_chat_history()
 
         # JSON structure
         # BaseModel.__fields__['my_field'].type_
@@ -263,7 +269,6 @@ This is the current JSON:
 ```
 
 This is the conversation:
-
 {history}
 
 Updated JSON:
