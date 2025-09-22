@@ -3,7 +3,7 @@ import requests
 
 from langchain_core.language_models.llms import LLM
 from langchain_openai.chat_models import ChatOpenAI
-from langchain_community.chat_models.ollama import ChatOllama
+from langchain_ollama import ChatOllama
 
 
 
@@ -13,10 +13,10 @@ class LLMDefault(LLM):
         return ""
 
     def _call(self, prompt, stop=None):
-        return "AI: You did not configure a Language Model. " "Do it in the settings!"
+        return "You did not configure a Language Model. " "Do it in the settings!"
 
     async def _acall(self, prompt, stop=None):
-        return "AI: You did not configure a Language Model. " "Do it in the settings!"
+        return "You did not configure a Language Model. " "Do it in the settings!"
 
 
 # elaborated from

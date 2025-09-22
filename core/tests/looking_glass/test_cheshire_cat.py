@@ -17,7 +17,7 @@ def get_class_from_decorated_singleton(singleton):
     return singleton().__class__
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def cheshire_cat(client):
     yield CheshireCat()  # don't panic, it's a singleton
 
@@ -59,7 +59,7 @@ def test_default_embedder_loaded(cheshire_cat):
 
 def test_procedures_embedded(cheshire_cat):
     # get embedded tools
-    procedures = cheshire_cat.memory.vectors.procedural.get_all_points()
+    procedures, _ = cheshire_cat.memory.vectors.procedural.get_all_points()
     assert len(procedures) == 3
 
     for p in procedures:

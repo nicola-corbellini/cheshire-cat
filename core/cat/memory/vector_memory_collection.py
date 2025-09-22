@@ -59,25 +59,24 @@ class VectorMemoryCollection:
             == self.embedder_size
         )
         alias = self.embedder_name + "_" + self.collection_name
-        if (
-            alias
-            == self.client.get_collection_aliases(self.collection_name)
-            .aliases[0]
-            .alias_name
+
+        existing_aliases = self.client.get_collection_aliases(self.collection_name).aliases
+
+        if ( len(existing_aliases) > 0 and
+            alias == existing_aliases[0].alias_name
             and same_size
         ):
             log.debug(f'Collection "{self.collection_name}" has the same embedder')
         else:
-            log.warning(f'Collection "{self.collection_name}" has different embedder')
+            log.warning(f'Collection "{self.collection_name}" has a different embedder')
             # Memory snapshot saving can be turned off in the .env file with:
             # SAVE_MEMORY_SNAPSHOTS=false
             if get_env("CCAT_SAVE_MEMORY_SNAPSHOTS") == "true":
                 # dump collection on disk before deleting
                 self.save_dump()
-                log.info(f"Dump '{self.collection_name}' completed")
 
             self.client.delete_collection(self.collection_name)
-            log.warning(f"Collection '{self.collection_name}' deleted")
+            log.warning(f'Collection "{self.collection_name}" deleted')
             self.create_collection()
 
     def create_db_collection_if_not_exists(self):
@@ -86,8 +85,8 @@ class VectorMemoryCollection:
         for c in collections_response.collections:
             if c.name == self.collection_name:
                 # collection exists. Do nothing
-                log.info(
-                    f"Collection '{self.collection_name}' already present in vector store"
+                log.debug(
+                    f'Collection "{self.collection_name}" already present in vector store'
                 )
                 return
 
@@ -95,36 +94,52 @@ class VectorMemoryCollection:
 
     # create collection
     def create_collection(self):
-        log.warning(f"Creating collection '{self.collection_name}' ...")
-        self.client.recreate_collection(
-            collection_name=self.collection_name,
-            vectors_config=VectorParams(
-                size=self.embedder_size, distance=Distance.COSINE
-            ),
-            # hybrid mode: original vector on Disk, quantized vector in RAM
-            optimizers_config=OptimizersConfigDiff(memmap_threshold=20000),
-            quantization_config=ScalarQuantization(
-                scalar=ScalarQuantizationConfig(
-                    type=ScalarType.INT8, quantile=0.95, always_ram=True
-                )
-            ),
-            # shard_number=3,
-        )
-
-        self.client.update_collection_aliases(
-            change_aliases_operations=[
-                CreateAliasOperation(
-                    create_alias=CreateAlias(
-                        collection_name=self.collection_name,
-                        alias_name=self.embedder_name + "_" + self.collection_name,
+        try:
+            log.warning(f'Creating collection "{self.collection_name}" ...')
+            self.client.create_collection(
+                collection_name=self.collection_name,
+                vectors_config=VectorParams(
+                    size=self.embedder_size, distance=Distance.COSINE
+                ),
+                # hybrid mode: original vector on Disk, quantized vector in RAM
+                optimizers_config=OptimizersConfigDiff(memmap_threshold=20000),
+                quantization_config=ScalarQuantization(
+                    scalar=ScalarQuantizationConfig(
+                        type=ScalarType.INT8, quantile=0.95, always_ram=True
                     )
-                )
-            ]
-        )
+                ),
+            )
+        except Exception as e:
+            log.error(f"Error creating collection {self.collection_name}. Try setting a higher timeout value in CCAT_QDRANT_CLIENT_TIMEOUT: {e}")
+            self.client.delete_collection(self.collection_name)
+            raise
+
+        try:
+            alias_name=self.embedder_name + "_" + self.collection_name
+            log.warning(f'Creating alias {alias_name} for collection "{self.collection_name}" ...')
+
+            self.client.update_collection_aliases(
+                change_aliases_operations=[
+                    CreateAliasOperation(
+                        create_alias=CreateAlias(
+                            collection_name=self.collection_name,
+                            alias_name=alias_name,
+                        )
+                    )
+                ]
+            )
+
+            log.warning(f'Created alias {alias_name} for collection "{self.collection_name}" ...')
+        except Exception as e:
+            log.error(f"Error creating collection alias {alias_name} for collection {self.collection_name}: {e}")
+            self.client.delete_collection(self.collection_name)
+            log.error(f" collection {self.collection_name} deleted")
+            raise
+
 
     # adapted from https://github.com/langchain-ai/langchain/blob/bfc12a4a7644cfc4d832cc4023086a7a5374f46a/libs/langchain/langchain/vectorstores/qdrant.py#L1965
     def _qdrant_filter_from_dict(self, filter: dict) -> Filter:
-        if not filter:
+        if not filter or len(filter)<1:
             return None
 
         return Filter(
@@ -207,22 +222,22 @@ class VectorMemoryCollection:
         )
         return res
 
-    # delete point in collection
     def delete_points(self, points_ids):
+        """Delete point in collection"""
         res = self.client.delete(
             collection_name=self.collection_name,
             points_selector=points_ids,
         )
         return res
 
-    # retrieve similar memories from embedding
     def recall_memories_from_embedding(
         self, embedding, metadata=None, k=5, threshold=None
     ):
-        # retrieve memories
-        memories = self.client.search(
+        """Retrieve similar memories from embedding"""
+
+        memories = self.client.query_points(
             collection_name=self.collection_name,
-            query_vector=embedding,
+            query=embedding,
             query_filter=self._qdrant_filter_from_dict(metadata),
             with_payload=True,
             with_vectors=True,
@@ -235,7 +250,7 @@ class VectorMemoryCollection:
                     oversampling=2.0,  # Available as of v1.3.0
                 )
             ),
-        )
+        ).points
 
         # convert Qdrant points to langchain.Document
         langchain_documents_from_points = []
@@ -257,17 +272,31 @@ class VectorMemoryCollection:
         #    doc.lc_kwargs = None
 
         return langchain_documents_from_points
-
-    # retrieve all the points in the collection
-    def get_all_points(self):
-        # retrieving the points
-        all_points, _ = self.client.scroll(
+    
+    def get_points(self, ids: List[str]):
+        """Get points by their ids."""
+        return self.client.retrieve(
             collection_name=self.collection_name,
+            ids=ids,
             with_vectors=True,
-            limit=10000,  # yeah, good for now dear :*
         )
 
-        return all_points
+    def get_all_points(
+            self,
+            limit: int = 10000,
+            offset: str | None = None
+        ):
+        """Retrieve all the points in the collection with an optional offset and limit."""
+        
+        # retrieving the points
+        all_points, next_page_offset = self.client.scroll(
+            collection_name=self.collection_name,
+            with_vectors=True,
+            offset=offset,  # Start from the given offset, or the beginning if None.
+            limit=limit # Limit the number of points retrieved to the specified limit.
+        )
+
+        return all_points, next_page_offset
 
     def db_is_remote(self):
         return isinstance(self.client._client, QdrantRemote)
@@ -282,9 +311,9 @@ class VectorMemoryCollection:
         port = self.client._client._port
 
         if os.path.isdir(folder):
-            log.info("Directory dormouse exists")
+            log.debug("Directory dormouse exists")
         else:
-            log.warning("Directory dormouse does NOT exists, creating it.")
+            log.info("Directory dormouse does NOT exists, creating it.")
             os.mkdir(folder)
 
         self.snapshot_info = self.client.create_snapshot(

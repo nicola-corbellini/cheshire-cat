@@ -11,7 +11,7 @@ from tests.utils import create_mock_plugin_zip
 
 
 # this function will be run before each test function
-@pytest.fixture
+@pytest.fixture(scope="function")
 def mad_hatter(client):  # client here injects the monkeypatched version of the cat
     # each test is given the mad_hatter instance (it's a singleton)
     yield MadHatter()
@@ -76,6 +76,8 @@ def test_plugin_install(mad_hatter: MadHatter, plugin_is_flat):
     # plugin is activated by default
     assert len(mad_hatter.plugins["mock_plugin"].hooks) == 3
     assert len(mad_hatter.plugins["mock_plugin"].tools) == 1
+    assert len(mad_hatter.plugins["mock_plugin"].forms) == 1
+    assert len(mad_hatter.plugins["mock_plugin"].endpoints) == 6
 
     # tool found
     new_tool = mad_hatter.plugins["mock_plugin"].tools[0]
@@ -140,10 +142,13 @@ def test_plugin_uninstall(mad_hatter: MadHatter, plugin_is_flat):
     # plugins list updated
     assert "mock_plugin" not in mad_hatter.plugins.keys()
     # plugin cache updated (only core_plugin stuff)
-    assert len(mad_hatter.tools) == 1  # default tool
+    assert len(mad_hatter.hooks) > 0
     for h_name, h_list in mad_hatter.hooks.items():
         assert len(h_list) == 1
         assert h_list[0].plugin_id == "core_plugin"
+    assert len(mad_hatter.tools) == 1
+    assert len(mad_hatter.forms) == 0
+    assert len(mad_hatter.endpoints) == 0
 
     # list of active plugins in DB is correct
     active_plugins = mad_hatter.load_active_plugins_from_db()

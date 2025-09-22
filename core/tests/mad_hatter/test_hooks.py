@@ -8,7 +8,7 @@ from tests.utils import create_mock_plugin_zip
 
 
 # this function will be run before each test function
-@pytest.fixture
+@pytest.fixture(scope="function")
 def mad_hatter(client):  # client here injects the monkeypatched version of the cat
     # each test is given the mad_hatter instance (it's a singleton)
     mad_hatter = MadHatter()
@@ -30,7 +30,7 @@ def test_hook_discovery(mad_hatter):
 
 
 def test_hook_priority_execution(mad_hatter):
-    fake_message = CatMessage(content="Priorities:", user_id="Alice")
+    fake_message = CatMessage(text="Priorities:", user_id="Alice")
 
     out = mad_hatter.execute_hook("before_cat_sends_message", fake_message, cat=None)
-    assert out.content == "Priorities: priority 3 priority 2"
+    assert out.text == "Priorities: priority 3 priority 2"

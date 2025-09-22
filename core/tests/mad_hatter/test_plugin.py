@@ -6,16 +6,16 @@ import subprocess
 from inspect import isfunction
 
 from tests.conftest import clean_up_mocks
+from tests.mocks.mock_plugin.mock_form import PizzaOrder, PizzaForm
 
 from cat.mad_hatter.mad_hatter import Plugin
-from cat.mad_hatter.decorators import CatHook, CatTool
+from cat.mad_hatter.decorators import CatHook, CatTool, CustomEndpoint
 
 mock_plugin_path = "tests/mocks/mock_plugin/"
 
-
 # this fixture will give test functions a ready instantiated plugin
 # (and having the `client` fixture, a clean setup every unit)
-@pytest.fixture
+@pytest.fixture(scope="function")
 def plugin(client):
     p = Plugin(mock_plugin_path)
     yield p
@@ -54,6 +54,12 @@ def test_create_plugin(plugin):
     # hooks and tools
     assert plugin.hooks == []
     assert plugin.tools == []
+    assert plugin.endpoints == []
+    assert plugin.forms == []
+    assert plugin.overrides == {}
+
+    assert not hasattr(plugin, "custom_activation_executed")
+    assert not hasattr(plugin, "custom_deactivation_executed")
 
 
 def test_activate_plugin(plugin):
@@ -92,9 +98,43 @@ def test_activate_plugin(plugin):
     assert "mock tool example 1" in tool.start_examples
     assert "mock tool example 2" in tool.start_examples
 
+    # endpoints
+    assert len(plugin.endpoints) == 6
+    for endpoint in plugin.endpoints:
+        assert isinstance(endpoint, CustomEndpoint)
+        assert endpoint.plugin_id == "mock_plugin"
+
+    # forms
+    assert len(plugin.forms) == 1
+    form = plugin.forms[0]
+    assert form == PizzaForm
+    assert form.model_class == PizzaOrder
+    assert form.plugin_id == "mock_plugin"
+    assert form.name == "PizzaForm"
+    assert form.description == "Pizza Order"
+    assert len(form.start_examples) == 2
+    assert "order a pizza" in form.start_examples
+    assert "I want pizza" in form.start_examples
+    assert len(form.stop_examples) == 2
+    assert "stop pizza order" in form.stop_examples
+    assert "I do not want a pizza anymore" in form.stop_examples
+    assert form.ask_confirm is True
+
+    # overrides by @plugin decorator
+    assert len(plugin.overrides) == 4
+    assert set(plugin.overrides.keys()) == {
+        "settings_schema",
+        "settings_model",
+        "activated",
+        "deactivated",
+    }
+    assert plugin.custom_activation_executed is True
+    assert not hasattr(plugin, "custom_deactivation_executed")
+
 
 def test_deactivate_plugin(plugin):
-    # The plugin is non active by default
+    
+    # activate plugin
     plugin.activate()
 
     # deactivate it
@@ -102,10 +142,17 @@ def test_deactivate_plugin(plugin):
 
     assert plugin.active is False
 
-    # hooks and tools
+    # overrides by @plugin decorator
+    assert plugin.custom_activation_executed is True
+    assert plugin.custom_deactivation_executed is True
+
+    # decorators
     assert len(plugin.hooks) == 0
     assert len(plugin.tools) == 0
-
+    assert len(plugin.endpoints) == 0
+    assert len(plugin.forms) == 0
+    assert len(plugin.overrides) == 0
+    
 
 def test_settings_schema(plugin):
     settings_schema = plugin.settings_schema()

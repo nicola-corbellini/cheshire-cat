@@ -7,6 +7,7 @@ from langchain_community.llms import (
 from langchain_openai import ChatOpenAI, OpenAI
 from langchain_cohere import ChatCohere
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_anthropic import ChatAnthropic
 
 from typing import Type
 import json
@@ -69,8 +70,8 @@ class LLMCustomConfig(LLMSettings):
 
     model_config = ConfigDict(
         json_schema_extra={
-            "humanReadableName": "Custom LLM",
-            "description": "LLM on a custom endpoint. See docs for examples.",
+            "humanReadableName": "Custom LLM (Deprecated)",
+            "description": "Legacy LLM adapter, you can now have it more custom in a plugin.",
             "link": "https://cheshirecat.ai/custom-large-language-model/",
         }
     )
@@ -282,6 +283,23 @@ class LLMGeminiChatConfig(LLMSettings):
     )
 
 
+class LLMAnthropicChatConfig(LLMSettings):
+    api_key: str
+    model: str = "claude-3-5-sonnet-20241022"
+    temperature: float = 0.7
+    max_tokens: int = 8192
+    max_retries: int = 2
+
+    _pyclass: Type = ChatAnthropic
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "humanReadableName": "Anthropic",
+            "description": "Configuration for Anthropic",
+            "link": "https://www.anthropic.com/",
+        }
+    )
+
 def get_allowed_language_models():
     list_llms_default = [
         LLMOpenAIChatConfig,
@@ -294,6 +312,7 @@ def get_allowed_language_models():
         LLMAzureChatOpenAIConfig,
         LLMHuggingFaceEndpointConfig,
         LLMHuggingFaceTextGenInferenceConfig,
+        LLMAnthropicChatConfig,
         LLMCustomConfig,
         LLMDefaultConfig,
     ]

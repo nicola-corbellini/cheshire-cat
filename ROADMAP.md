@@ -1,4 +1,28 @@
 
+**Version 2.0 (temp)**
+
+ - multimodality
+ - graph (can be a plugin)
+ - multiagent apis
+ - review clients
+ - all endpoints typed
+ - function calling standard
+
+**Version 1.8 (temp)**
+
+ - custom endpoints (OK)
+ - stress tests:
+   - load testing (OK - https://github.com/lucagobbi/stressed-cat)
+- form & tools
+   - model getter (OK)
+   - json schema + Pydantic support at choice
+- telemetry
+  - anonymous (just unique instance id, country, (n.utenti, info plugin))
+- open issues (OK)
+- community:
+  - real pizza challenge (MAYBE)
+  - meow talk (YT lives)
+
 * **Version 1.5**
 	* Technical 
 		* Plugins
@@ -23,20 +47,20 @@
 			* compose with local LLM + embedder - ready to use (OK)
 			* (nginx?)
 		* LLM improvements
-			* explicit support for chat vs completion
-			* each LLM has its own default template
-		* User support (not management)
+			* explicit support for chat vs completion (OK)
+			* each LLM has its own default template (not relevant anymore)
+		* User support (OK)
 			* fix bugs (OK)
 			* sessions (OK)
 	* Outreach
 		* Community
 			* 1 live event (OK)
 			* 4 meow talk (OK)
-			* 1 challenge (OK)
+			* 1 challenge (KO)
 		* Dissemination
-			* use cases examples
-			* tutorials on hooks
-			* hook discovery tool
+			* use cases examples (OK)
+			* tutorials on hooks (OK)
+			* hook discovery tool (OK)
 			* website analytics (OK)
 		* Branding
 			* logo (OK)

@@ -1,8 +1,7 @@
 from typing import Dict
 
-from cat.auth.connection import HTTPAuth
-from cat.auth.permissions import AuthPermission, AuthResource
-from fastapi import Request, APIRouter, Body, HTTPException, Depends
+from cat.auth.permissions import AuthPermission, AuthResource, check_permissions
+from fastapi import Request, APIRouter, Body, HTTPException
 
 from cat.factory.llm import get_llms_schemas
 from cat.db import crud, models
@@ -24,7 +23,7 @@ LLM_SELECTED_NAME = "llm_selected"
 # get configured LLMs and configuration schemas
 @router.get("/settings")
 def get_llms_settings(
-    stray=Depends(HTTPAuth(AuthResource.LLM, AuthPermission.LIST)),
+    cat=check_permissions(AuthResource.LLM, AuthPermission.LIST),
 ) -> Dict:
     """Get the list of the Large Language Models"""
     LLM_SCHEMAS = get_llms_schemas()
@@ -63,7 +62,7 @@ def get_llms_settings(
 def get_llm_settings(
     request: Request,
     languageModelName: str,
-    stray=Depends(HTTPAuth(AuthResource.LLM, AuthPermission.READ)),
+    cat=check_permissions(AuthResource.LLM, AuthPermission.READ),
 ) -> Dict:
     """Get settings and schema of the specified Large Language Model"""
     LLM_SCHEMAS = get_llms_schemas()
@@ -94,7 +93,7 @@ def upsert_llm_setting(
     request: Request,
     languageModelName: str,
     payload: Dict = Body({"openai_api_key": "your-key-here"}),
-    stray=Depends(HTTPAuth(AuthResource.LLM, AuthPermission.EDIT)),
+    cat=check_permissions(AuthResource.LLM, AuthPermission.EDIT),
 ) -> Dict:
     """Upsert the Large Language Model setting"""
     LLM_SCHEMAS = get_llms_schemas()
@@ -134,7 +133,7 @@ def upsert_llm_setting(
     try:
         ccat.load_memory()
     except Exception as e:
-        log.error(e)
+        log.error("Error while changing LLM")
         crud.delete_settings_by_category(category=LLM_SELECTED_CATEGORY)
         crud.delete_settings_by_category(category=LLM_CATEGORY)
         raise HTTPException(

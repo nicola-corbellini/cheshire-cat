@@ -26,7 +26,7 @@ class MainAgent(BaseAgent):
         else:
             self.verbose = False
 
-    async def execute(self, stray) -> AgentOutput:
+    def execute(self, cat) -> AgentOutput:
         """Execute the agents.
 
         Returns
@@ -38,35 +38,34 @@ class MainAgent(BaseAgent):
         # prepare input to be passed to the agent.
         #   Info will be extracted from working memory
         # Note: agent_input works both as a dict and as an object
-        agent_input : BaseModelDict = self.format_agent_input(stray)
+        agent_input : BaseModelDict = self.format_agent_input(cat)
         agent_input = self.mad_hatter.execute_hook(
-            "before_agent_starts", agent_input, cat=stray
+            "before_agent_starts", agent_input, cat=cat
         )
 
         # store the agent input inside the working memory
-        stray.working_memory.agent_input = agent_input
+        cat.working_memory.agent_input = agent_input
 
         # should we run the default agents?
-        fast_reply = {}
-        fast_reply = self.mad_hatter.execute_hook(
-            "agent_fast_reply", fast_reply, cat=stray
+        agent_fast_reply = self.mad_hatter.execute_hook(
+            "agent_fast_reply", {}, cat=cat
         )
-        if isinstance(fast_reply, AgentOutput):
-            return fast_reply
-        if isinstance(fast_reply, dict) and "output" in fast_reply:
-            return AgentOutput(**fast_reply)
+        if isinstance(agent_fast_reply, AgentOutput):
+            return agent_fast_reply
+        if isinstance(agent_fast_reply, dict) and "output" in agent_fast_reply:
+            return AgentOutput(**agent_fast_reply)
 
         # obtain prompt parts from plugins
         prompt_prefix = self.mad_hatter.execute_hook(
-            "agent_prompt_prefix", prompts.MAIN_PROMPT_PREFIX, cat=stray
+            "agent_prompt_prefix", prompts.MAIN_PROMPT_PREFIX, cat=cat
         )
         prompt_suffix = self.mad_hatter.execute_hook(
-            "agent_prompt_suffix", prompts.MAIN_PROMPT_SUFFIX, cat=stray
+            "agent_prompt_suffix", prompts.MAIN_PROMPT_SUFFIX, cat=cat
         )
 
         # run tools and forms
         procedures_agent = ProceduresAgent()
-        procedures_agent_out : AgentOutput = await procedures_agent.execute(stray)
+        procedures_agent_out : AgentOutput = procedures_agent.execute(cat)
         if procedures_agent_out.return_direct:
             return procedures_agent_out
 
@@ -74,16 +73,16 @@ class MainAgent(BaseAgent):
         # - no procedures were recalled or selected or
         # - procedures have all return_direct=False
         memory_agent = MemoryAgent()
-        memory_agent_out : AgentOutput = await memory_agent.execute(
-            # TODO: should all agents only receive stray?
-            stray, prompt_prefix, prompt_suffix
+        memory_agent_out : AgentOutput = memory_agent.execute(
+            # TODO: should all agents only receive StrayCat?
+            cat, prompt_prefix, prompt_suffix
         )
 
         memory_agent_out.intermediate_steps += procedures_agent_out.intermediate_steps
 
         return memory_agent_out
 
-    def format_agent_input(self, stray):
+    def format_agent_input(self, cat):
         """Format the input for the Agent.
 
         The method formats the strings of recalled memories and chat history that will be provided to the Langchain
@@ -109,21 +108,21 @@ class MainAgent(BaseAgent):
 
         # format memories to be inserted in the prompt
         episodic_memory_formatted_content = self.agent_prompt_episodic_memories(
-            stray.working_memory.episodic_memories
+            cat.working_memory.episodic_memories
         )
         declarative_memory_formatted_content = self.agent_prompt_declarative_memories(
-            stray.working_memory.declarative_memories
+            cat.working_memory.declarative_memories
         )
 
         # format conversation history to be inserted in the prompt
         # TODOV2: take away
-        conversation_history_formatted_content = stray.stringify_chat_history()
+        conversation_history_formatted_content = cat.working_memory.stringify_chat_history()
 
         return BaseModelDict(**{
             "episodic_memory": episodic_memory_formatted_content,
             "declarative_memory": declarative_memory_formatted_content,
             "tools_output": "",
-            "input": stray.working_memory.user_message_json.text,  # TODOV2: take away
+            "input": cat.working_memory.user_message_json.text,  # TODOV2: take away
             "chat_history": conversation_history_formatted_content, # TODOV2: take away
         })
 

@@ -2,7 +2,6 @@ import os
 import glob
 import shutil
 import inspect
-import traceback
 from copy import deepcopy
 from typing import List, Dict
 
@@ -18,6 +17,7 @@ from cat.mad_hatter.plugin_extractor import PluginExtractor
 from cat.mad_hatter.plugin import Plugin
 from cat.mad_hatter.decorators.hook import CatHook
 from cat.mad_hatter.decorators.tool import CatTool
+from cat.mad_hatter.decorators.endpoint import CustomEndpoint
 
 from cat.experimental.form import CatForm
 
@@ -29,7 +29,7 @@ from cat.experimental.form import CatForm
 @singleton
 class MadHatter:
     # loads and execute plugins
-    # - enter into the plugin folder and loads everthing
+    # - enter into the plugin folder and loads everything
     #   that is decorated or named properly
     # - orders plugged in hooks by name and priority
     # - exposes functionality to the cat
@@ -42,6 +42,7 @@ class MadHatter:
         ] = {}  # dict of active plugins hooks ( hook_name -> [CatHook, CatHook, ...])
         self.tools: List[CatTool] = []  # list of active plugins tools
         self.forms: List[CatForm] = []  # list of active plugins forms
+        self.endpoints: List[CustomEndpoint] = []  # list of active plugins endpoints
 
         self.active_plugins: List[str] = []
 
@@ -99,7 +100,7 @@ class MadHatter:
             f"{self.plugins_folder}*/"
         )
 
-        log.info("ACTIVE PLUGINS:")
+        log.info("Active Plugins:")
         log.info(self.active_plugins)
 
         # discover plugins, folder by folder
@@ -127,10 +128,10 @@ class MadHatter:
             plugin = Plugin(plugin_path)
             # if plugin is valid, keep a reference
             self.plugins[plugin.id] = plugin
-        except Exception as e:
+        except Exception:
             # Something happened while loading the plugin.
             # Print the error and go on with the others.
-            log.error(str(e))
+            log.error(f"Error while loading plugin from {plugin_path}")
 
     # Load hooks, tools and forms of the active plugins into MadHatter
     def sync_hooks_tools_and_forms(self):
@@ -138,14 +139,17 @@ class MadHatter:
         self.hooks = {}
         self.tools = []
         self.forms = []
+        self.endpoints = []
 
         for _, plugin in self.plugins.items():
-            # load hooks, tools and forms from active plugins
+            # load hooks, tools, forms and endpoints from active plugins
             if plugin.id in self.active_plugins:
                 # cache tools
                 self.tools += plugin.tools
 
                 self.forms += plugin.forms
+
+                self.endpoints += plugin.endpoints
 
                 # cache hooks (indexed by hook name)
                 for h in plugin.hooks:
@@ -192,13 +196,6 @@ class MadHatter:
             if plugin_is_active:
                 log.warning(f"Toggle plugin {plugin_id}: Deactivate")
 
-                # Execute hook on plugin deactivation
-                # Deactivation hook must happen before actual deactivation,
-                # otherwise the hook will not be available in _plugin_overrides anymore
-                for hook in self.plugins[plugin_id]._plugin_overrides:
-                    if hook.name == "deactivated":
-                        hook.function(self.plugins[plugin_id])
-
                 # Deactivate the plugin
                 self.plugins[plugin_id].deactivate()
                 # Remove the plugin from the list of active plugins
@@ -212,13 +209,6 @@ class MadHatter:
                 except Exception as e:
                     # Couldn't activate the plugin
                     raise e
-
-                # Execute hook on plugin activation
-                # Activation hook must happen before actual activation,
-                # otherwise the hook will still not be available in _plugin_overrides
-                for hook in self.plugins[plugin_id]._plugin_overrides:
-                    if hook.name == "activated":
-                        hook.function(self.plugins[plugin_id])
 
                 # Add the plugin in the list of active plugins
                 self.active_plugins.append(plugin_id)
@@ -247,12 +237,10 @@ class MadHatter:
                         f"Executing {hook.plugin_id}::{hook.name} with priority {hook.priority}"
                     )
                     hook.function(cat=cat)
-                except Exception as e:
+                except Exception:
                     log.error(f"Error in plugin {hook.plugin_id}::{hook.name}")
-                    log.error(e)
                     plugin_obj = self.plugins[hook.plugin_id]
                     log.warning(plugin_obj.plugin_specific_error_message())
-                    traceback.print_exc()
             return
 
         # Hook with arguments.
@@ -275,12 +263,10 @@ class MadHatter:
                 # log.debug(f"Hook {hook.plugin_id}::{hook.name} returned {tea_spoon}")
                 if tea_spoon is not None:
                     tea_cup = tea_spoon
-            except Exception as e:
+            except Exception:
                 log.error(f"Error in plugin {hook.plugin_id}::{hook.name}")
-                log.error(e)
                 plugin_obj = self.plugins[hook.plugin_id]
                 log.warning(plugin_obj.plugin_specific_error_message())
-                traceback.print_exc()
 
         # tea_cup has passed through all hooks. Return final output
         return tea_cup
